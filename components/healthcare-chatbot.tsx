@@ -18,7 +18,6 @@ import {
   Heart,
   Activity,
   Clock,
-  LogOut,
   Lightbulb,
   Pill,
   Shield,
@@ -27,34 +26,34 @@ import {
   Droplets,
   Apple,
   Dumbbell,
+  Sparkles,
 } from "lucide-react"
-import { SymptomAnalyzer, type SymptomAnalysis } from "@/lib/symptom-analyzer"
-import { MedicalKnowledgeBase } from "@/lib/medical-knowledge-base"
-import { useAuth } from "@/lib/auth-context"
+import { AIHealthService, type AIHealthResponse } from "@/lib/ai-health-service"
 
 interface Message {
   id: string
   content: string
   sender: "user" | "bot"
   timestamp: Date
-  type?: "symptom" | "question" | "analysis" | "disclaimer" | "wellness"
-  analysis?: SymptomAnalysis
+  type?: "symptom" | "question" | "analysis" | "disclaimer" | "wellness" | "emergency" | "medical"
+  aiResponse?: AIHealthResponse
+  confidence?: number
 }
 
 const INITIAL_MESSAGE: Message = {
   id: "1",
   content:
-    "Hello! I'm your healthcare assistant. I can help you understand your symptoms, provide general health information, and answer wellness questions like sleep, diet, and exercise. Please describe any symptoms you're experiencing or ask me about healthy living. Remember, this is not a substitute for professional medical advice.",
+    "Hello! I'm your AI-powered healthcare assistant. I can help you understand your symptoms, provide personalized health guidance, and answer wellness questions about sleep, diet, exercise, and more. I use advanced AI to provide more natural, conversational responses. Please describe any symptoms you're experiencing or ask me about healthy living. Remember, this is not a substitute for professional medical advice.",
   sender: "bot",
   timestamp: new Date(),
   type: "disclaimer",
 }
 
 export function HealthcareChatbot() {
-  const { user, logout } = useAuth()
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE])
   const [inputValue, setInputValue] = useState("")
   const [isTyping, setIsTyping] = useState(false)
+  const [conversationHistory, setConversationHistory] = useState<string[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -71,36 +70,34 @@ export function HealthcareChatbot() {
   }, [messages])
 
   useEffect(() => {
-    if (user) {
-      const welcomeMessage: Message = {
-        id: "welcome-" + Date.now(),
-        content: `Welcome back, ${user.name}! I'm here to help you with any health concerns you may have. How are you feeling today?`,
-        sender: "bot",
-        timestamp: new Date(),
-        type: "question",
-      }
+    const welcomeMessage: Message = {
+      id: "welcome-" + Date.now(),
+      content: `Welcome to HealthChat AI! I'm your AI healthcare assistant, powered by advanced language models to provide personalized and conversational health guidance. How are you feeling today?`,
+      sender: "bot",
+      timestamp: new Date(),
+      type: "question",
+    }
 
-      const healthTip = MedicalKnowledgeBase.getRandomHealthTip()
+    AIHealthService.generateHealthTip().then((tip) => {
       const tipMessage: Message = {
         id: "tip-" + Date.now(),
-        content: `💡 **Daily Health Tip: ${healthTip.title}**\n\n${healthTip.description}\n\n**Benefits:** ${healthTip.benefits.slice(0, 2).join(", ")}\n\nYou can ask me about symptoms, medications, first aid, or wellness questions like "How much should I sleep?" or "What should I eat?"`,
+        content: `💡 **AI-Generated Health Tip:**\n\n${tip}\n\nFeel free to ask me about symptoms, medications, first aid, or wellness questions like "How much should I sleep?" or "What's a healthy diet for me?"`,
         sender: "bot",
         timestamp: new Date(),
         type: "question",
       }
-
       setMessages((prev) => [INITIAL_MESSAGE, welcomeMessage, tipMessage])
-    }
-  }, [user])
+    })
+  }, [])
 
   const quickActions = [
-    { label: "Sleep Tips", icon: Moon, query: "How much should I sleep?" },
-    { label: "Hydration", icon: Droplets, query: "How much water should I drink?" },
-    { label: "Healthy Diet", icon: Apple, query: "What should I eat for a healthy diet?" },
-    { label: "Exercise", icon: Dumbbell, query: "How much should I exercise?" },
-    { label: "Health Tip", icon: Lightbulb, query: "Give me a health tip" },
-    { label: "Medication Info", icon: Pill, query: "Tell me about medication" },
-    { label: "First Aid", icon: Shield, query: "First aid guidance" },
+    { label: "Sleep Advice", icon: Moon, query: "How much should I sleep and what affects sleep quality?" },
+    { label: "Hydration Guide", icon: Droplets, query: "How much water should I drink daily?" },
+    { label: "Nutrition Tips", icon: Apple, query: "What should I eat for optimal health?" },
+    { label: "Exercise Plan", icon: Dumbbell, query: "How much should I exercise weekly?" },
+    { label: "AI Health Tip", icon: Sparkles, query: "Give me a personalized health tip" },
+    { label: "Medication Help", icon: Pill, query: "I need help with medication information" },
+    { label: "First Aid", icon: Shield, query: "I need first aid guidance" },
   ]
 
   const handleQuickAction = (query: string) => {
@@ -124,87 +121,38 @@ export function HealthcareChatbot() {
     setInputValue("")
     setIsTyping(true)
 
-    setTimeout(() => {
-      try {
-        // Check if this is a wellness question first
-        const wellnessGuidance = MedicalKnowledgeBase.getWellnessGuidance(currentInput)
+    setConversationHistory((prev) => [...prev, `User: ${currentInput}`])
 
-        if (wellnessGuidance.length > 0) {
-          // Handle wellness questions
-          const guide = wellnessGuidance[0]
-          let responseContent = `**${guide.question}**\n\n${guide.answer}\n\n`
+    try {
+      const aiResponse = await AIHealthService.generateResponse(currentInput, conversationHistory)
 
-          if (guide.recommendations.length > 0) {
-            responseContent += `**Recommendations:**\n${guide.recommendations.map((r) => `• ${r}`).join("\n")}\n\n`
-          }
-
-          if (guide.factors.length > 0) {
-            responseContent += `**Factors to consider:**\n${guide.factors.map((f) => `• ${f}`).join("\n")}\n\n`
-          }
-
-          if (guide.warnings && guide.warnings.length > 0) {
-            responseContent += `**Important notes:**\n${guide.warnings.map((w) => `• ${w}`).join("\n")}\n\n`
-          }
-
-          responseContent += `*This is general wellness information. Consult healthcare professionals for personalized advice.*`
-
-          const botResponse: Message = {
-            id: (Date.now() + 1).toString(),
-            content: responseContent,
-            sender: "bot",
-            timestamp: new Date(),
-            type: "wellness",
-          }
-
-          setMessages((prev) => [...prev, botResponse])
-        } else {
-          // Handle symptom analysis and other medical queries
-          const analysis = SymptomAnalyzer.analyzeSymptoms(currentInput)
-
-          let responseContent = `Based on your input, here's what I found:\n\n`
-
-          responseContent += `**${analysis.urgencyLevel}**\n\n`
-
-          if (analysis.possibleConditions.length > 0) {
-            responseContent += `**Possible conditions:**\n${analysis.possibleConditions.map((c) => `• ${c}`).join("\n")}\n\n`
-          }
-
-          if (analysis.recommendations.length > 0) {
-            responseContent += `**Recommendations:**\n${analysis.recommendations.map((r) => `• ${r}`).join("\n")}\n\n`
-          }
-
-          if (analysis.followUpQuestions && analysis.followUpQuestions.length > 0) {
-            responseContent += `**Follow-up questions:**\n${analysis.followUpQuestions.map((q) => `• ${q}`).join("\n")}\n\n`
-          }
-
-          responseContent += `*Please remember: This is general information only. Always consult a healthcare professional for proper diagnosis and treatment.*`
-
-          const botResponse: Message = {
-            id: (Date.now() + 1).toString(),
-            content: responseContent,
-            sender: "bot",
-            timestamp: new Date(),
-            type: "analysis",
-            analysis: analysis,
-          }
-
-          setMessages((prev) => [...prev, botResponse])
-        }
-      } catch (error) {
-        console.error("Error processing query:", error)
-        const errorResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          content:
-            "I apologize, but I encountered an error while processing your question. Please try again or rephrase your question. If the problem persists, please contact support.",
-          sender: "bot",
-          timestamp: new Date(),
-          type: "analysis",
-        }
-        setMessages((prev) => [...prev, errorResponse])
-      } finally {
-        setIsTyping(false)
+      const botResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        content: aiResponse.content,
+        sender: "bot",
+        timestamp: new Date(),
+        type: aiResponse.type,
+        aiResponse: aiResponse,
+        confidence: aiResponse.confidence,
       }
-    }, 1500)
+
+      setMessages((prev) => [...prev, botResponse])
+
+      setConversationHistory((prev) => [...prev, `Assistant: ${aiResponse.content}`])
+    } catch (error) {
+      console.error("Error processing query:", error)
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        content:
+          "I apologize, but I encountered an error while processing your question. This might be due to high demand on our AI systems. Please try again in a moment, or rephrase your question. If the problem persists, please contact support.",
+        sender: "bot",
+        timestamp: new Date(),
+        type: "analysis",
+      }
+      setMessages((prev) => [...prev, errorResponse])
+    } finally {
+      setIsTyping(false)
+    }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -223,7 +171,7 @@ export function HealthcareChatbot() {
           </p>
         )
       }
-      if (line.startsWith("• ")) {
+      if (line.startsWith("• ") || line.startsWith("- ")) {
         return (
           <p key={index} className="ml-4 mb-1 text-sm">
             {line}
@@ -247,6 +195,21 @@ export function HealthcareChatbot() {
     })
   }
 
+  const getResponseTypeBadge = (type: string, confidence?: number) => {
+    switch (type) {
+      case "emergency":
+        return { color: "bg-red-100 text-red-800", icon: AlertTriangle, label: "EMERGENCY" }
+      case "symptom":
+        return { color: "bg-orange-100 text-orange-800", icon: Activity, label: "SYMPTOM ANALYSIS" }
+      case "wellness":
+        return { color: "bg-blue-100 text-blue-800", icon: Lightbulb, label: "WELLNESS GUIDANCE" }
+      case "medical":
+        return { color: "bg-green-100 text-green-800", icon: Heart, label: "MEDICAL INFO" }
+      default:
+        return { color: "bg-gray-100 text-gray-800", icon: Bot, label: "AI RESPONSE" }
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen max-w-4xl mx-auto p-4">
       {/* Header */}
@@ -256,22 +219,17 @@ export function HealthcareChatbot() {
             <Heart className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">HealthChat AI</h1>
-            <p className="text-muted-foreground">Welcome, {user?.name}</p>
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              HealthChat AI
+              <Sparkles className="w-5 h-5 text-primary" />
+            </h1>
+            <p className="text-muted-foreground">AI-Powered Healthcare Assistant</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => window.open("/status", "_blank")} title="System Status">
             <Settings className="w-4 h-4" />
-          </Button>
-          <div className="text-right">
-            <p className="text-sm font-medium text-foreground">{user?.name}</p>
-            <p className="text-xs text-muted-foreground">{user?.email}</p>
-          </div>
-          <Button variant="outline" size="sm" onClick={logout}>
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
           </Button>
         </div>
       </div>
@@ -314,34 +272,43 @@ export function HealthcareChatbot() {
                   <div className={`max-w-[80%] ${message.sender === "user" ? "order-first" : ""}`}>
                     <Card className={`${message.sender === "user" ? "bg-primary text-primary-foreground" : "bg-card"}`}>
                       <CardContent className="p-3">
-                        {message.sender === "bot" && message.analysis ? (
+                        {message.sender === "bot" && message.aiResponse ? (
                           <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                              <Badge
-                                variant="secondary"
-                                className={`${SymptomAnalyzer.getSeverityColor(message.analysis.severity)} border-0`}
-                              >
-                                <Activity className="w-3 h-3 mr-1" />
-                                {message.analysis.severity.toUpperCase()} PRIORITY
-                              </Badge>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {(() => {
+                                const badge = getResponseTypeBadge(message.aiResponse.type, message.confidence)
+                                return (
+                                  <Badge variant="secondary" className={`${badge.color} border-0`}>
+                                    {React.createElement(badge.icon, { className: "w-3 h-3 mr-1" })}
+                                    {badge.label}
+                                  </Badge>
+                                )
+                              })()}
+
+                              {message.confidence && (
+                                <Badge variant="outline" className="text-xs">
+                                  {Math.round(message.confidence * 100)}% Confidence
+                                </Badge>
+                              )}
                             </div>
 
                             <Separator />
 
                             <div className="text-sm leading-relaxed">{formatMessageContent(message.content)}</div>
-                          </div>
-                        ) : message.type === "wellness" ? (
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-0">
-                                <Lightbulb className="w-3 h-3 mr-1" />
-                                WELLNESS GUIDANCE
-                              </Badge>
-                            </div>
 
-                            <Separator />
-
-                            <div className="text-sm leading-relaxed">{formatMessageContent(message.content)}</div>
+                            {message.aiResponse.followUpQuestions &&
+                              message.aiResponse.followUpQuestions.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-border/20">
+                                  <p className="text-xs font-medium text-muted-foreground mb-2">Follow-up questions:</p>
+                                  <div className="space-y-1">
+                                    {message.aiResponse.followUpQuestions.map((question, idx) => (
+                                      <p key={idx} className="text-xs text-muted-foreground">
+                                        • {question}
+                                      </p>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                           </div>
                         ) : (
                           <div className="text-sm leading-relaxed">{formatMessageContent(message.content)}</div>
@@ -351,7 +318,7 @@ export function HealthcareChatbot() {
                           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/20">
                             <AlertTriangle className="w-4 h-4 text-amber-500" />
                             <Badge variant="secondary" className="text-xs">
-                              Medical Disclaimer
+                              AI Medical Assistant
                             </Badge>
                           </div>
                         )}
@@ -396,7 +363,7 @@ export function HealthcareChatbot() {
                             style={{ animationDelay: "0.2s" }}
                           />
                         </div>
-                        <span className="text-xs text-muted-foreground ml-2">Analyzing your question...</span>
+                        <span className="text-xs text-muted-foreground ml-2">AI is thinking...</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -413,7 +380,7 @@ export function HealthcareChatbot() {
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyPress={handleKeyPress}
-          placeholder="Ask about symptoms, medications, first aid, sleep, diet, exercise, or wellness tips..."
+          placeholder="Ask me anything about your health, symptoms, wellness, or get personalized advice..."
           className="flex-1"
           disabled={isTyping}
         />
@@ -425,8 +392,9 @@ export function HealthcareChatbot() {
       {/* Disclaimer */}
       <div className="mt-4 p-3 bg-muted rounded-lg">
         <p className="text-xs text-muted-foreground text-center">
-          This chatbot provides general health information only and is not a substitute for professional medical advice,
-          diagnosis, or treatment. Always consult your healthcare provider for medical concerns.
+          This AI-powered chatbot provides general health information and is not a substitute for professional medical
+          advice, diagnosis, or treatment. Always consult your healthcare provider for medical concerns. AI responses
+          are generated using advanced language models but should not replace professional medical consultation.
         </p>
       </div>
     </div>
