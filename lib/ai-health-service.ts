@@ -36,7 +36,7 @@ Response format should be conversational and helpful, not robotic.`
           : userMessage
 
       const { text } = await generateText({
-        model: groq("llama-3.1-8b-instant"),
+        model: groq("llama-3.3-70b-versatile"),
         system: this.SYSTEM_PROMPT,
         prompt: context,
         maxTokens: 800,
@@ -107,7 +107,7 @@ Response format should be conversational and helpful, not robotic.`
   static async generateHealthTip(): Promise<string> {
     try {
       const { text } = await generateText({
-        model: groq("llama-3.1-8b-instant"),
+        model: groq("llama-3.3-70b-versatile"),
         system: "You are a health and wellness expert. Provide practical, actionable health tips.",
         prompt: "Generate a helpful daily health tip that people can easily implement. Keep it concise and motivating.",
         maxTokens: 200,
