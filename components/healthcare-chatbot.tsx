@@ -28,22 +28,32 @@ import {
   Dumbbell,
   Sparkles,
 } from "lucide-react"
-import { AIHealthService, type AIHealthResponse } from "@/lib/ai-health-service"
+import { LocalAIService, type ChatResponse } from "@/lib/local-ai-service"
 
 interface Message {
   id: string
   content: string
   sender: "user" | "bot"
   timestamp: Date
-  type?: "symptom" | "question" | "analysis" | "disclaimer" | "wellness" | "emergency" | "medical"
-  aiResponse?: AIHealthResponse
+  type?:
+    | "symptom"
+    | "question"
+    | "analysis"
+    | "disclaimer"
+    | "wellness"
+    | "emergency"
+    | "medical"
+    | "greeting"
+    | "calorie"
+    | "general"
+  chatResponse?: ChatResponse
   confidence?: number
 }
 
 const INITIAL_MESSAGE: Message = {
   id: "1",
   content:
-    "Hello! I'm your AI-powered healthcare assistant. I can help you understand your symptoms, provide personalized health guidance, and answer wellness questions about sleep, diet, exercise, and more. I use advanced AI to provide more natural, conversational responses. Please describe any symptoms you're experiencing or ask me about healthy living. Remember, this is not a substitute for professional medical advice.",
+    "Hello! I'm your healthcare assistant. I can help you understand your symptoms, provide health guidance, answer wellness questions about sleep, diet, exercise, and tell you calorie information for foods. I use intelligent pattern matching to provide helpful responses. Please describe any symptoms you're experiencing or ask me about healthy living. Remember, this is not a substitute for professional medical advice.",
   sender: "bot",
   timestamp: new Date(),
   type: "disclaimer",
@@ -53,7 +63,6 @@ export function HealthcareChatbot() {
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE])
   const [inputValue, setInputValue] = useState("")
   const [isTyping, setIsTyping] = useState(false)
-  const [conversationHistory, setConversationHistory] = useState<string[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -72,16 +81,16 @@ export function HealthcareChatbot() {
   useEffect(() => {
     const welcomeMessage: Message = {
       id: "welcome-" + Date.now(),
-      content: `Welcome to HealthChat AI! I'm your AI healthcare assistant, powered by advanced language models to provide personalized and conversational health guidance. How are you feeling today?`,
+      content: `Welcome to HealthChat AI! I'm your healthcare assistant, ready to help with symptoms, wellness advice, and nutrition information. How are you feeling today?`,
       sender: "bot",
       timestamp: new Date(),
       type: "question",
     }
 
-    AIHealthService.generateHealthTip().then((tip) => {
+    LocalAIService.generateHealthTip().then((tip) => {
       const tipMessage: Message = {
         id: "tip-" + Date.now(),
-        content: `💡 **AI-Generated Health Tip:**\n\n${tip}\n\nFeel free to ask me about symptoms, medications, first aid, or wellness questions like "How much should I sleep?" or "What's a healthy diet for me?"`,
+        content: `💡 **Health Tip:**\n\n${tip}\n\nFeel free to ask me about symptoms, medications, first aid, wellness questions like "How much should I sleep?", or food calories like "How many calories in an apple?"`,
         sender: "bot",
         timestamp: new Date(),
         type: "question",
@@ -95,7 +104,7 @@ export function HealthcareChatbot() {
     { label: "Hydration Guide", icon: Droplets, query: "How much water should I drink daily?" },
     { label: "Nutrition Tips", icon: Apple, query: "What should I eat for optimal health?" },
     { label: "Exercise Plan", icon: Dumbbell, query: "How much should I exercise weekly?" },
-    { label: "AI Health Tip", icon: Sparkles, query: "Give me a personalized health tip" },
+    { label: "Food Calories", icon: Sparkles, query: "How many calories in an apple?" },
     { label: "Medication Help", icon: Pill, query: "I need help with medication information" },
     { label: "First Aid", icon: Shield, query: "I need first aid guidance" },
   ]
@@ -121,30 +130,26 @@ export function HealthcareChatbot() {
     setInputValue("")
     setIsTyping(true)
 
-    setConversationHistory((prev) => [...prev, `User: ${currentInput}`])
-
     try {
-      const aiResponse = await AIHealthService.generateResponse(currentInput, conversationHistory)
+      const chatResponse = await LocalAIService.generateResponse(currentInput)
 
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: aiResponse.content,
+        content: chatResponse.message,
         sender: "bot",
         timestamp: new Date(),
-        type: aiResponse.type,
-        aiResponse: aiResponse,
-        confidence: aiResponse.confidence,
+        type: chatResponse.type,
+        chatResponse: chatResponse,
+        confidence: chatResponse.confidence,
       }
 
       setMessages((prev) => [...prev, botResponse])
-
-      setConversationHistory((prev) => [...prev, `Assistant: ${aiResponse.content}`])
     } catch (error) {
       console.error("Error processing query:", error)
       const errorResponse: Message = {
         id: (Date.now() + 1).toString(),
         content:
-          "I apologize, but I encountered an error while processing your question. This might be due to high demand on our AI systems. Please try again in a moment, or rephrase your question. If the problem persists, please contact support.",
+          "I apologize, but I encountered an error while processing your question. Please try rephrasing your question or ask about symptoms, wellness, or food calories.",
         sender: "bot",
         timestamp: new Date(),
         type: "analysis",
@@ -205,8 +210,14 @@ export function HealthcareChatbot() {
         return { color: "bg-blue-100 text-blue-800", icon: Lightbulb, label: "WELLNESS GUIDANCE" }
       case "medical":
         return { color: "bg-green-100 text-green-800", icon: Heart, label: "MEDICAL INFO" }
+      case "greeting":
+        return { color: "bg-purple-100 text-purple-800", icon: Bot, label: "GREETING" }
+      case "calorie":
+        return { color: "bg-yellow-100 text-yellow-800", icon: Apple, label: "NUTRITION INFO" }
+      case "health":
+        return { color: "bg-blue-100 text-blue-800", icon: Lightbulb, label: "HEALTH GUIDANCE" }
       default:
-        return { color: "bg-gray-100 text-gray-800", icon: Bot, label: "AI RESPONSE" }
+        return { color: "bg-gray-100 text-gray-800", icon: Bot, label: "RESPONSE" }
     }
   }
 
@@ -223,7 +234,7 @@ export function HealthcareChatbot() {
               HealthChat AI
               <Sparkles className="w-5 h-5 text-primary" />
             </h1>
-            <p className="text-muted-foreground">AI-Powered Healthcare Assistant</p>
+            <p className="text-muted-foreground">Smart Healthcare Assistant</p>
           </div>
         </div>
 
@@ -272,11 +283,11 @@ export function HealthcareChatbot() {
                   <div className={`max-w-[80%] ${message.sender === "user" ? "order-first" : ""}`}>
                     <Card className={`${message.sender === "user" ? "bg-primary text-primary-foreground" : "bg-card"}`}>
                       <CardContent className="p-3">
-                        {message.sender === "bot" && message.aiResponse ? (
+                        {message.sender === "bot" && message.chatResponse ? (
                           <div className="space-y-3">
                             <div className="flex items-center gap-2 flex-wrap">
                               {(() => {
-                                const badge = getResponseTypeBadge(message.aiResponse.type, message.confidence)
+                                const badge = getResponseTypeBadge(message.chatResponse.type, message.confidence)
                                 return (
                                   <Badge variant="secondary" className={`${badge.color} border-0`}>
                                     {React.createElement(badge.icon, { className: "w-3 h-3 mr-1" })}
@@ -295,20 +306,6 @@ export function HealthcareChatbot() {
                             <Separator />
 
                             <div className="text-sm leading-relaxed">{formatMessageContent(message.content)}</div>
-
-                            {message.aiResponse.followUpQuestions &&
-                              message.aiResponse.followUpQuestions.length > 0 && (
-                                <div className="mt-3 pt-3 border-t border-border/20">
-                                  <p className="text-xs font-medium text-muted-foreground mb-2">Follow-up questions:</p>
-                                  <div className="space-y-1">
-                                    {message.aiResponse.followUpQuestions.map((question, idx) => (
-                                      <p key={idx} className="text-xs text-muted-foreground">
-                                        • {question}
-                                      </p>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
                           </div>
                         ) : (
                           <div className="text-sm leading-relaxed">{formatMessageContent(message.content)}</div>
@@ -318,7 +315,7 @@ export function HealthcareChatbot() {
                           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/20">
                             <AlertTriangle className="w-4 h-4 text-amber-500" />
                             <Badge variant="secondary" className="text-xs">
-                              AI Medical Assistant
+                              Healthcare Assistant
                             </Badge>
                           </div>
                         )}
@@ -363,7 +360,7 @@ export function HealthcareChatbot() {
                             style={{ animationDelay: "0.2s" }}
                           />
                         </div>
-                        <span className="text-xs text-muted-foreground ml-2">AI is thinking...</span>
+                        <span className="text-xs text-muted-foreground ml-2">Processing your question...</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -380,7 +377,7 @@ export function HealthcareChatbot() {
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyPress={handleKeyPress}
-          placeholder="Ask me anything about your health, symptoms, wellness, or get personalized advice..."
+          placeholder="Ask me about symptoms, wellness, food calories, or say hello..."
           className="flex-1"
           disabled={isTyping}
         />
@@ -392,9 +389,9 @@ export function HealthcareChatbot() {
       {/* Disclaimer */}
       <div className="mt-4 p-3 bg-muted rounded-lg">
         <p className="text-xs text-muted-foreground text-center">
-          This AI-powered chatbot provides general health information and is not a substitute for professional medical
-          advice, diagnosis, or treatment. Always consult your healthcare provider for medical concerns. AI responses
-          are generated using advanced language models but should not replace professional medical consultation.
+          This healthcare assistant provides general health information and is not a substitute for professional medical
+          advice, diagnosis, or treatment. Always consult your healthcare provider for medical concerns. Responses are
+          generated using intelligent pattern matching and should not replace professional medical consultation.
         </p>
       </div>
     </div>
